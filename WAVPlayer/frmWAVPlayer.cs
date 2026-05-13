@@ -27,6 +27,10 @@ namespace WAVPlayer
             if (ofdWAVFile.ShowDialog() == DialogResult.OK)
             {
                 txtPath.Text = ofdWAVFile.FileName;
+
+                this.btnPlay.Enabled = true;
+                this.btnLoop.Enabled = true;
+                this.btnStop.Enabled = true;
             }
         }
 
