@@ -1,76 +1,157 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
+using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
-using System.Linq;
 using System.Media;
-using System.Text;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace WAVPlayer
 {
     public partial class frmWAVPlayer : Form
     {
+        private SoundPlayer _loopPlayer = null;
+
+        // ── 讓無邊框視窗可以拖移 ───────────────────────────────────────
+        [DllImport("user32.dll")]
+        private static extern bool ReleaseCapture();
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int HT_CAPTION = 0x2;
+
+        private void TitleBar_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ReleaseCapture();
+                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+            }
+        }
+
+        // ── 漸層繪製 ───────────────────────────────────────────────────
+        private void pnlTitleBar_Paint(object sender, PaintEventArgs e)
+        {
+            var p = sender as Panel;
+            using (var brush = new LinearGradientBrush(
+                p.ClientRectangle,
+                ColorTranslator.FromHtml("#A855F7"),   // 左：紫
+                ColorTranslator.FromHtml("#EC4899"),   // 右：粉
+                LinearGradientMode.Horizontal))
+            {
+                e.Graphics.FillRectangle(brush, p.ClientRectangle);
+            }
+        }
+
+        private void pnlStatus_Paint(object sender, PaintEventArgs e)
+        {
+            var p = sender as Panel;
+            using (var brush = new LinearGradientBrush(
+                p.ClientRectangle,
+                ColorTranslator.FromHtml("#A855F7"),
+                ColorTranslator.FromHtml("#EC4899"),
+                LinearGradientMode.Horizontal))
+            {
+                e.Graphics.FillRectangle(brush, p.ClientRectangle);
+            }
+        }
+
+        // ── 初始化 ─────────────────────────────────────────────────────
         public frmWAVPlayer()
         {
             InitializeComponent();
         }
 
+        private void frmWAVPlayer_Load(object sender, EventArgs e)
+        {
+            SetStatus("就緒");
+        }
+
+        // ── 瀏覽按鈕 ───────────────────────────────────────────────────
         private void btnBrowse_Click(object sender, EventArgs e)
         {
-            // 過濾條件設定為WAV檔案
-            ofdWAVFile.Filter = "WAV Files(*.wav)|*.wav";
-            // 打開檔案對話方塊
             if (ofdWAVFile.ShowDialog() == DialogResult.OK)
             {
-                txtPath.Text = ofdWAVFile.FileName;
-
-                this.btnPlay.Enabled = true;
-                this.btnLoop.Enabled = true;
-                this.btnStop.Enabled = true;
+                txtPath.Text      = ofdWAVFile.FileName;
+                txtPath.ForeColor = ColorTranslator.FromHtml("#6B21A8");
+                btnPlay.Enabled   = true;
+                btnLoop.Enabled   = true;
+                btnStop.Enabled   = true;
+                SetStatus($"已載入：{Path.GetFileName(ofdWAVFile.FileName)}");
             }
         }
 
+        // ── 播放一次 ───────────────────────────────────────────────────
         private void btnPlay_Click(object sender, EventArgs e)
         {
-            SoundPlayer player1 = new SoundPlayer(); // 建立播放器物件
-            player1.SoundLocation = txtPath.Text; // 指定音效所在路徑檔名
-            player1.Load(); // 載入音效檔資料
-            player1.Play(); // 播放音效
-
+            StopLoop();
+            try
+            {
+                var player = new SoundPlayer(txtPath.Text);
+                player.Load();
+                player.Play();
+                SetStatus("▶ 播放中...");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"播放失敗：{ex.Message}", "錯誤",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
+        // ── 重複播放 ───────────────────────────────────────────────────
         private void btnLoop_Click(object sender, EventArgs e)
         {
-            // 使用完整檔名建立物件
-            SoundPlayer player2 = new SoundPlayer(txtPath.Text);
-            player2.PlayLooping(); // 重複播放
+            StopLoop();
+            try
+            {
+                _loopPlayer = new SoundPlayer(txtPath.Text);
+                _loopPlayer.PlayLooping();
+                SetStatus("↺ 重複播放中...");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"播放失敗：{ex.Message}", "錯誤",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
+        // ── 停止播放 ───────────────────────────────────────────────────
         private void btnStop_Click(object sender, EventArgs e)
         {
-            FileStream fsWAV = new FileStream(txtPath.Text, FileMode.Open);
-            // 使用檔案串流建立物件
-            SoundPlayer player3 = new SoundPlayer(fsWAV);
-            player3.Stop(); // 停止播放
-            fsWAV.Close(); // 關閉串流
+            StopLoop();
+            try { new SoundPlayer(txtPath.Text).Stop(); } catch { }
+            SetStatus("■ 已停止");
         }
 
+        // ── 結束程式 ───────────────────────────────────────────────────
         private void btnEnd_Click(object sender, EventArgs e)
         {
             Application.Exit();
         }
 
+        // ── 關閉確認 ───────────────────────────────────────────────────
         private void frmWAVPlayer_FormClosing(object sender, FormClosingEventArgs e)
         {
-            var result = MessageBox.Show("確定要關閉應用程式嗎？", "關閉確認", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            var result = MessageBox.Show("確定要關閉應用程式嗎？", "關閉確認",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (result == DialogResult.No)
-            {
-                e.Cancel = true; // 取消關閉
-            }
+                e.Cancel = true;
+            else
+                StopLoop();
+        }
+
+        // ── 工具方法 ───────────────────────────────────────────────────
+        private void StopLoop()
+        {
+            _loopPlayer?.Stop();
+            _loopPlayer?.Dispose();
+            _loopPlayer = null;
+        }
+
+        private void SetStatus(string msg)
+        {
+            lblStatus.Text = $"  {msg}";
         }
     }
 }
