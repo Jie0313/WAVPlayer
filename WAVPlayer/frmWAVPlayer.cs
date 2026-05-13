@@ -12,62 +12,65 @@ namespace WAVPlayer
     {
         private SoundPlayer _loopPlayer = null;
 
-        // ── 讓無邊框視窗可以拖移 ───────────────────────────────────────
-        [DllImport("user32.dll")]
-        private static extern bool ReleaseCapture();
-        [DllImport("user32.dll")]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        private const int WM_NCLBUTTONDOWN = 0xA1;
-        private const int HT_CAPTION = 0x2;
+        // ── 無邊框視窗拖移 ─────────────────────────────────────────
+        [DllImport("user32.dll")] static extern bool ReleaseCapture();
+        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, int w, int l);
 
         private void TitleBar_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
             {
                 ReleaseCapture();
-                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+                SendMessage(Handle, 0xA1, 0x2, 0);
             }
         }
 
-        // ── 漸層繪製 ───────────────────────────────────────────────────
-        private void pnlTitleBar_Paint(object sender, PaintEventArgs e)
+        // ── 漸層 Paint 事件（在 Load 裡掛上，不放 Designer）─────────
+        private void frmWAVPlayer_Load(object sender, EventArgs e)
         {
-            var p = sender as Panel;
-            using (var brush = new LinearGradientBrush(
-                p.ClientRectangle,
-                ColorTranslator.FromHtml("#A855F7"),   // 左：紫
-                ColorTranslator.FromHtml("#EC4899"),   // 右：粉
-                LinearGradientMode.Horizontal))
+            // 標題列漸層
+            pnlTitle.Paint += (s, pe) =>
             {
-                e.Graphics.FillRectangle(brush, p.ClientRectangle);
-            }
+                using (var b = new LinearGradientBrush(pnlTitle.ClientRectangle,
+                    ColorTranslator.FromHtml("#A855F7"),
+                    ColorTranslator.FromHtml("#EC4899"),
+                    LinearGradientMode.Horizontal))
+                    pe.Graphics.FillRectangle(b, pnlTitle.ClientRectangle);
+            };
+
+            // 狀態列漸層
+            pnlStatus.Paint += (s, pe) =>
+            {
+                using (var b = new LinearGradientBrush(pnlStatus.ClientRectangle,
+                    ColorTranslator.FromHtml("#A855F7"),
+                    ColorTranslator.FromHtml("#EC4899"),
+                    LinearGradientMode.Horizontal))
+                    pe.Graphics.FillRectangle(b, pnlStatus.ClientRectangle);
+            };
+
+            // Form 背景漸層
+            this.Paint += (s, pe) =>
+            {
+                using (var b = new LinearGradientBrush(this.ClientRectangle,
+                    ColorTranslator.FromHtml("#F0E6FF"),
+                    ColorTranslator.FromHtml("#FCE4F0"),
+                    LinearGradientMode.Vertical))
+                    pe.Graphics.FillRectangle(b, this.ClientRectangle);
+            };
+
+            pnlTitle.Invalidate();
+            pnlStatus.Invalidate();
+            this.Invalidate();
+            SetStatus("就緒");
         }
 
-        private void pnlStatus_Paint(object sender, PaintEventArgs e)
-        {
-            var p = sender as Panel;
-            using (var brush = new LinearGradientBrush(
-                p.ClientRectangle,
-                ColorTranslator.FromHtml("#A855F7"),
-                ColorTranslator.FromHtml("#EC4899"),
-                LinearGradientMode.Horizontal))
-            {
-                e.Graphics.FillRectangle(brush, p.ClientRectangle);
-            }
-        }
-
-        // ── 初始化 ─────────────────────────────────────────────────────
+        // ── 建構子 ─────────────────────────────────────────────────
         public frmWAVPlayer()
         {
             InitializeComponent();
         }
 
-        private void frmWAVPlayer_Load(object sender, EventArgs e)
-        {
-            SetStatus("就緒");
-        }
-
-        // ── 瀏覽按鈕 ───────────────────────────────────────────────────
+        // ── 事件處理 ───────────────────────────────────────────────
         private void btnBrowse_Click(object sender, EventArgs e)
         {
             if (ofdWAVFile.ShowDialog() == DialogResult.OK)
@@ -81,7 +84,6 @@ namespace WAVPlayer
             }
         }
 
-        // ── 播放一次 ───────────────────────────────────────────────────
         private void btnPlay_Click(object sender, EventArgs e)
         {
             StopLoop();
@@ -99,7 +101,6 @@ namespace WAVPlayer
             }
         }
 
-        // ── 重複播放 ───────────────────────────────────────────────────
         private void btnLoop_Click(object sender, EventArgs e)
         {
             StopLoop();
@@ -116,7 +117,6 @@ namespace WAVPlayer
             }
         }
 
-        // ── 停止播放 ───────────────────────────────────────────────────
         private void btnStop_Click(object sender, EventArgs e)
         {
             StopLoop();
@@ -124,13 +124,11 @@ namespace WAVPlayer
             SetStatus("■ 已停止");
         }
 
-        // ── 結束程式 ───────────────────────────────────────────────────
         private void btnEnd_Click(object sender, EventArgs e)
         {
             Application.Exit();
         }
 
-        // ── 關閉確認 ───────────────────────────────────────────────────
         private void frmWAVPlayer_FormClosing(object sender, FormClosingEventArgs e)
         {
             var result = MessageBox.Show("確定要關閉應用程式嗎？", "關閉確認",
@@ -141,7 +139,6 @@ namespace WAVPlayer
                 StopLoop();
         }
 
-        // ── 工具方法 ───────────────────────────────────────────────────
         private void StopLoop()
         {
             _loopPlayer?.Stop();
@@ -149,9 +146,6 @@ namespace WAVPlayer
             _loopPlayer = null;
         }
 
-        private void SetStatus(string msg)
-        {
-            lblStatus.Text = $"  {msg}";
-        }
+        private void SetStatus(string msg) => lblStatus.Text = $"● {msg}";
     }
 }
